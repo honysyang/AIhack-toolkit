@@ -1,0 +1,45 @@
+import argparse
+import time
+import os
+import ray
+from ray.job_submission import JobSubmissionClient, JobStatus
+import re
+import sys
+
+if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Submit a job to Ray cluster with dynamic host and command execution.")
+    parser.add_argument("--host", type=str, required=True, help="The host address of the Ray cluster head node. Format: http(s)://<ip>:<port>")
+    parser.add_argument("--cmd", type=str, required=True, help="The command to be executed on the Ray cluster.")
+    args = parser.parse_args()
+
+    print("Connecting to Ray cluster...")
+    client = JobSubmissionClient(f"{args.host}")
+
+    print("get job list...")
+    jobs = client.list_jobs()
+    print(jobs)
+
+    print("submit job...")
+    job_id = client.submit_job(
+        entrypoint=f"{args.cmd}",
+        runtime_env={"working_dir": "./"}
+    )
+    print(f"Submitted job ID: {job_id}")
+
+
+    print("wait for job status...")
+    start = time.time()
+    timeout_seconds=300
+    status_to_wait_for = {JobStatus.SUCCEEDED, JobStatus.STOPPED, JobStatus.FAILED}
+    while time.time() - start <= timeout_seconds:
+        status = client.get_job_status(job_id)
+        print(f"Status: {status}")
+        if status in status_to_wait_for:
+            break
+        time.sleep(1)
+    print(f"Status: {status}")
+    
+    print("wait for job log...")
+    logs = client.get_job_logs(job_id)
+    print(logs)
